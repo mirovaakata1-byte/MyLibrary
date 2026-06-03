@@ -15,34 +15,34 @@ with sqlite3.connect(DB_NAME) as conn:
                       DROP TABLE IF EXISTS genres;
                       DROP TABLE IF EXISTS authors""")
 #Таблица авторов
-    cur.executescript("""CREATE TABLE authors
+    cur.execute("""CREATE TABLE authors
                       (id_authors INTEGER PRIMARY KEY,
                       name_authors TEXT NOT NULL,
                       sort_name TEXT)""")
 #Таблица жанров   
-    cur.executescript("""CREATE TABLE genres
+    cur.execute("""CREATE TABLE genres
                       (id_genre INTEGER PRIMARY KEY,
                       name_genre TEXT NOT NULL)""")
 #Таблица издателей   
-    cur.executescript("""CREATE TABLE publishers
+    cur.execute("""CREATE TABLE publishers
                       (id_publisher INTEGER PRIMARY KEY,
                       name_publishers TEXT NOT NULL)""")
 #Таблица мест расположения    
-    cur.executescript("""CREATE TABLE locations
+    cur.execute("""CREATE TABLE locations
                       (id_location INTEGER PRIMARY KEY,
                       location_room TEXT, 
                       location_wardrobe INTEGER NOT NULL,
                       location_shelf INTEGER NOT NULL,
                       description TEXT)""")
 #Таблица пользователей
-    cur.executescript("""CREATE TABLE users 
+    cur.execute("""CREATE TABLE users 
                       (id_user INTEGER PRIMARY KEY,
                       username TEXT NOT NULL,
                       email TEXT NOT NULL UNIQUE,
                       phone TEXT,
                       password_hash TEXT NOT NULL)""")
     
-    cur.executescript("""CREATE TABLE books
+    cur.execute("""CREATE TABLE books
                       (id_book INTEGER PRIMARY KEY,
                       book_title TEXT NOT NULL,
                       isbn TEXT UNIQUE,
@@ -61,19 +61,19 @@ with sqlite3.connect(DB_NAME) as conn:
                       FOREIGN KEY (location_id) REFERENCES locations (id_location),
                       FOREIGN KEY (user_id) REFERENCES users (id_user))""")
     
-    cur.executescript("""CREATE TABLE book_genres
+    cur.execute("""CREATE TABLE book_genres
                       (book_id INTEGER NOT NULL,
                       genre_id INTEGER NOT NULL,
                       FOREIGN KEY (book_id) REFERENCES books (id_book),
                       FOREIGN KEY (genre_id) REFERENCES genres (id_genre))""")
     
-    cur.executescript("""CREATE TABLE book_authors
+    cur.execute("""CREATE TABLE book_authors
                       (book_id INTEGER NOT NULL,
                       author_id INTEGER NOT NULL,
                       FOREIGN KEY (book_id) REFERENCES books (id_book),
                       FOREIGN KEY (author_id) REFERENCES authors (id_authors))""")
     
-    cur.executescript("""CREATE TABLE history
+    cur.execute("""CREATE TABLE history
                       (id_history INTEGER PRIMARY KEY,
                       user_id INTEGER NOT NULL,
                       book_id INTEGER NOT NULL,
@@ -83,3 +83,19 @@ with sqlite3.connect(DB_NAME) as conn:
                       FOREIGN KEY (book_id) REFERENCES books (id_book))""")
         
 print ("ВСЕ ТАБЛИЦЫ СОЗДАНЫ!!!")
+
+DB_NAME="Каталог_книг_(физическая библиотека).db"
+with sqlite3.connect(DB_NAME) as conn:
+    conn.execute("PRAGMA foreign_keys = ON")
+    cur=conn.cursor()
+#Модифицирование для книжки   
+    cur.execute("""CREATE TRIGGER trg_books_modified
+                AFTER UPDATE ON books
+                WHEN NEW.modified_date IS NULL OR OLD.modified_date IS NULL 
+                    OR NEW.modified_date = OLD.modified_date
+                BEGIN
+                    UPDATE books 
+                    SET modified_date = CURRENT_TIMESTAMP
+                    WHERE id_book = NEW.id_book 
+                    AND (modified_date IS NULL OR modified_date = OLD.modified_date),
+                END""")
