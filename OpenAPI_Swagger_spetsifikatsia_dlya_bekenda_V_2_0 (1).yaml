@@ -1,0 +1,1033 @@
+openapi: 3.0.3
+info:
+  title: Моя библиотека API
+  description: |
+    API для управления каталогом физических книг.
+    Поддерживает мобильное и веб-приложения.
+    Пользователи — владельцы личных библиотек (регистрируются).
+    Читатели не регистрируются, их данные хранятся в карточке книги при выдаче.
+  version: 1.0.0
+  contact:
+    name: Разработчик
+    email: dev@mylibrary.local
+
+servers:
+  - url: https://api.mylibrary.local/v1
+    description: Продакшн сервер
+  - url: http://localhost:8000/v1
+    description: Локальная разработка
+
+tags:
+  - name: auth
+    description: Аутентификация
+  - name: books
+    description: Книги
+  - name: authors
+    description: Авторы
+  - name: genres
+    description: Жанры
+  - name: publishers
+    description: Издатели
+  - name: locations
+    description: Места расположения
+  - name: history
+    description: История действий
+
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Вставьте JWT токен, полученный при логине.
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        username:
+          type: string
+          maxLength: 100
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        phone:
+          type: string
+          maxLength: 30
+          nullable: true
+      required:
+        - username
+        - email
+        - password_hash
+
+    LoginRequest:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+      required:
+        - username
+        - password
+
+    LoginResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: JWT токен
+        token_type:
+          type: string
+          example: bearer
+        user:
+          $ref: '#/components/schemas/User'
+
+    BookList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/BookSummary'
+        total:
+          type: integer
+        page:
+          type: integer
+        size:
+          type: integer
+        total_pages:
+          type: integer
+
+    BookSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+          maxLength: 500
+        authors:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthorShort'
+        status:
+          type: string
+          enum: [в наличии, выдана, утрачена]
+        location:
+          $ref: '#/components/schemas/LocationShort'
+        updated_at:
+          type: string
+          format: date-time
+
+    BookDetail:
+      allOf:
+        - $ref: '#/components/schemas/BookSummary'
+        - type: object
+          properties:
+            isbn:
+              type: string
+              nullable: true
+              maxLength: 20
+            udk:
+              type: string
+              nullable: true
+              maxLength: 20
+            publication_year:
+              type: integer
+              nullable: true
+              minimum: 0
+            page_count:
+              type: integer
+              nullable: true
+              minimum: 1
+            description:
+              type: string
+              nullable: true
+            cover_image_path:
+              type: string
+              nullable: true
+              description: URL или base64-строка обложки
+            borrower_name:
+              type: string
+              nullable: true
+              description: ФИО читателя, если книга выдана
+            borrower_address:
+              type: string
+              nullable: true
+              description: Адрес читателя
+            borrower_phone:
+              type: string
+              nullable: true
+              description: Телефон читателя
+            added_date:
+              type: string
+              format: date-time
+            modified_date:
+              type: string
+              format: date-time
+            publisher:
+              $ref: '#/components/schemas/PublisherShort'
+            genres:
+              type: array
+              items:
+                $ref: '#/components/schemas/GenreShort'
+            user_id:
+              type: integer
+              description: ID владельца книги
+
+    BookCreate:
+      type: object
+      required:
+        - title
+        - user_id
+      properties:
+        title:
+          type: string
+          maxLength: 500
+        isbn:
+          type: string
+          maxLength: 20
+        udk:
+          type: string
+          maxLength: 20
+        publication_year:
+          type: integer
+          minimum: 0
+        page_count:
+          type: integer
+          minimum: 1
+        description:
+          type: string
+        cover_image_path:
+          type: string
+          description: base64 или URL обложки
+        status:
+          type: string
+          enum: [в наличии, выдана, утрачена]
+          default: в наличии
+        borrower_name:
+          type: string
+          maxLength: 255
+        borrower_address:
+          type: string
+        borrower_phone:
+          type: string
+          maxLength: 30
+        location_id:
+          type: integer
+        publisher_id:
+          type: integer
+        author_ids:
+          type: array
+          items:
+            type: integer
+          description: Список ID авторов
+        genre_ids:
+          type: array
+          items:
+            type: integer
+        user_id:
+          type: integer
+          description: ID владельца (обязательно)
+
+    BookUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+        isbn:
+          type: string
+        udk:
+          type: string
+        publication_year:
+          type: integer
+        page_count:
+          type: integer
+        description:
+          type: string
+        cover_image_path:
+          type: string
+        status:
+          type: string
+          enum: [в наличии, выдана, утрачена]
+        borrower_name:
+          type: string
+        borrower_address:
+          type: string
+        borrower_phone:
+          type: string
+        location_id:
+          type: integer
+        publisher_id:
+          type: integer
+        author_ids:
+          type: array
+          items:
+            type: integer
+        genre_ids:
+          type: array
+          items:
+            type: integer
+
+    Author:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+          maxLength: 255
+        sort_name:
+          type: string
+          maxLength: 255
+          nullable: true
+
+    AuthorShort:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+
+    Genre:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+          maxLength: 100
+
+    GenreShort:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+
+    Publisher:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+          maxLength: 255
+
+    PublisherShort:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+
+    Location:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+          maxLength: 255
+        description:
+          type: string
+          nullable: true
+
+    LocationShort:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+
+    HistoryEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        book_id:
+          type: integer
+        action:
+          type: string
+          enum: [добавление, удаление, редактирование, выдача, возврат]
+        action_timestamp:
+          type: string
+          format: date-time
+        user:
+          $ref: '#/components/schemas/User'
+        book:
+          $ref: '#/components/schemas/BookSummary'
+
+    ScanResponse:
+      type: object
+      properties:
+        recognized_isbn:
+          type: string
+          description: Распознанный ISBN
+        recognized_udk:
+          type: string
+        book_data:
+          $ref: '#/components/schemas/BookDetail'
+          description: Метаданные из внешнего API (если найдены)
+
+    ExternalBook:
+      type: object
+      properties:
+        isbn:
+          type: string
+        title:
+          type: string
+        authors:
+          type: array
+          items:
+            type: string
+        publisher:
+          type: string
+        year:
+          type: integer
+        pages:
+          type: integer
+        description:
+          type: string
+        cover_url:
+          type: string
+
+    Error:
+      type: object
+      properties:
+        detail:
+          type: string
+
+parameters:
+  - name: page
+    in: query
+    schema:
+      type: integer
+      minimum: 1
+      default: 1
+    description: Номер страницы
+  - name: size
+    in: query
+    schema:
+      type: integer
+      minimum: 1
+      maximum: 100
+      default: 20
+    description: Размер страницы
+  - name: status
+    in: query
+    schema:
+      type: string
+      enum: [в наличии, выдана, утрачена]
+    description: Фильтр по статусу
+  - name: genre_id
+    in: query
+    schema:
+      type: integer
+    description: Фильтр по ID жанра
+  - name: author_id
+    in: query
+    schema:
+      type: integer
+    description: Фильтр по ID автора
+  - name: location_id
+    in: query
+    schema:
+      type: integer
+    description: Фильтр по ID места расположения
+  - name: search
+    in: query
+    schema:
+      type: string
+    description: Поиск по названию, ISBN, УДК, описанию
+  - name: sort
+    in: query
+    schema:
+      type: string
+      enum: [title, author, year, added]
+    description: Поле сортировки
+
+paths:
+  /api/auth/login:
+    post:
+      tags: [auth]
+      summary: Аутентификация пользователя
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Успешный вход
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Неверные учётные данные
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/books:
+    get:
+      tags: [books]
+      summary: Список книг текущего пользователя
+      description: Возвращает книги, принадлежащие авторизованному владельцу. Поддерживает пагинацию и фильтры.
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/size'
+        - $ref: '#/components/parameters/status'
+        - $ref: '#/components/parameters/genre_id'
+        - $ref: '#/components/parameters/author_id'
+        - $ref: '#/components/parameters/location_id'
+        - $ref: '#/components/parameters/search'
+        - $ref: '#/components/parameters/sort'
+      responses:
+        '200':
+          description: Список книг
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags: [books]
+      summary: Добавление новой книги
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookCreate'
+      responses:
+        '201':
+          description: Книга создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookDetail'
+        '400':
+          description: Ошибка валидации
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/books/{id}:
+    get:
+      tags: [books]
+      summary: Детальная информация о книге
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Книга найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookDetail'
+        '404':
+          description: Книга не найдена
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    put:
+      tags: [books]
+      summary: Обновление книги
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookUpdate'
+      responses:
+        '200':
+          description: Книга обновлена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookDetail'
+        '400':
+          description: Ошибка валидации
+        '404':
+          description: Книга не найдена
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    delete:
+      tags: [books]
+      summary: Удаление книги
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Книга удалена
+        '404':
+          description: Книга не найдена
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/books/scan:
+    post:
+      tags: [books]
+      summary: Распознавание ISBN/УДК по фото
+      description: Принимает изображение страницы, выполняет OCR, ищет книгу во внешних API.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                image:
+                  type: string
+                  format: binary
+                  description: Файл изображения (jpg, png)
+      responses:
+        '200':
+          description: Результат распознавания
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanResponse'
+        '400':
+          description: Не удалось распознать
+
+  /api/books/search-external:
+    get:
+      tags: [books]
+      summary: Поиск книги по ISBN во внешних API
+      parameters:
+        - name: isbn
+          in: query
+          required: true
+          schema:
+            type: string
+          description: ISBN (10 или 13 символов)
+      responses:
+        '200':
+          description: Результаты поиска
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ExternalBook'
+        '400':
+          description: ISBN не указан
+
+  /api/authors:
+    get:
+      tags: [authors]
+      summary: Список всех авторов
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Author'
+    post:
+      tags: [authors]
+      summary: Добавить автора
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  maxLength: 255
+                sort_name:
+                  type: string
+                  maxLength: 255
+      responses:
+        '201':
+          description: Автор создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Author'
+
+  /api/authors/{id}:
+    put:
+      tags: [authors]
+      summary: Обновить автора
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                sort_name:
+                  type: string
+      responses:
+        '200':
+          description: Обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Author'
+    delete:
+      tags: [authors]
+      summary: Удалить автора
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Удалён
+        '409':
+          description: Нельзя удалить, используется в книгах
+
+  /api/genres:
+    get:
+      tags: [genres]
+      summary: Список жанров
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Genre'
+    post:
+      tags: [genres]
+      summary: Добавить жанр
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  maxLength: 100
+      responses:
+        '201':
+          description: Создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Genre'
+
+  /api/genres/{id}:
+    put:
+      tags: [genres]
+      summary: Обновить жанр
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+      responses:
+        '200':
+          description: Обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Genre'
+    delete:
+      tags: [genres]
+      summary: Удалить жанр
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Удалён
+        '409':
+          description: Используется в книгах
+
+  /api/publishers:
+    get:
+      tags: [publishers]
+      summary: Список издателей
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Publisher'
+    post:
+      tags: [publishers]
+      summary: Добавить издателя
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  maxLength: 255
+      responses:
+        '201':
+          description: Создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Publisher'
+
+  /api/publishers/{id}:
+    put:
+      tags: [publishers]
+      summary: Обновить издателя
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+      responses:
+        '200':
+          description: Обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Publisher'
+    delete:
+      tags: [publishers]
+      summary: Удалить издателя
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Удалён
+        '409':
+          description: Используется в книгах
+
+  /api/locations:
+    get:
+      tags: [locations]
+      summary: Список мест расположения
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Location'
+    post:
+      tags: [locations]
+      summary: Добавить место
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  maxLength: 255
+                description:
+                  type: string
+      responses:
+        '201':
+          description: Создано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Location'
+
+  /api/locations/{id}:
+    put:
+      tags: [locations]
+      summary: Обновить место
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+      responses:
+        '200':
+          description: Обновлено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Location'
+    delete:
+      tags: [locations]
+      summary: Удалить место
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Удалено
+        '409':
+          description: Используется в книгах
+
+  /api/history:
+    get:
+      tags: [history]
+      summary: История действий текущего пользователя
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: book_id
+          in: query
+          schema:
+            type: integer
+        - name: action
+          in: query
+          schema:
+            type: string
+            enum: [добавление, удаление, редактирование, выдача, возврат]
+        - name: from_date
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to_date
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Список записей истории
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/HistoryEntry'
+                  total:
+                    type: integer
+                  page:
+                    type: integer
+                  size:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+components:
+  responses:
+    Unauthorized:
+      description: Не авторизован
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
