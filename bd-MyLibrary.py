@@ -1,5 +1,5 @@
 import sqlite3
-DB_NAME="Каталог_книг_(физическая библиотека).db"
+DB_NAME="My_library(catalog).db"
 
 with sqlite3.connect(DB_NAME) as conn:
     conn.execute("PRAGMA foreign_keys = ON")
