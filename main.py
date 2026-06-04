@@ -4,10 +4,12 @@ from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
 from external_api import search_by_isbn
 from typing import Optional
+from ocr import extract_text_from_image, find_isbn
+from fastapi import UploadFile, File
 import math
 
 from database import get_db
-from models import Book, Author, Genre, Publisher, Location, BookAuthor, BookGenre
+from models import Book, Author, Genre, Publisher, Location, BookAuthor, BookGenre, History
 from schemas import BookSummary, BookDetail, BookList, BookCreate, BookUpdate
 
 app = FastAPI(title="Моя библиотека API")
@@ -99,6 +101,43 @@ async def search_external(isbn: str):
         raise HTTPException(status_code=404, detail="Книга с таким ISBN не найдена")
     return result
 
+@app.post("/api/books/scan")
+async def scan_book(image: UploadFile = File(...)):
+    """Загружает фото, распознаёт ISBN через OCR, ищет книгу в Open Library."""
+    # Проверка, что файл — изображение
+    if not image.content_type or not image.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Файл должен быть изображением (jpg, png)")
+
+    # Читаем байты
+    image_bytes = await image.read()
+    if len(image_bytes) == 0:
+        raise HTTPException(status_code=400, detail="Файл пустой")
+
+    # Распознаём текст
+    try:
+        text = extract_text_from_image(image_bytes)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка распознавания: {str(e)}")
+
+    # Ищем ISBN
+    recognized_isbn = find_isbn(text)
+    if not recognized_isbn:
+        return {
+            "recognized_isbn": None,
+            "recognized_udk": None,
+            "book_data": None,
+            "message": "ISBN не распознан на фото"
+        }
+
+    # Ищем книгу во внешнем API
+    book_data = search_by_isbn(recognized_isbn)
+
+    return {
+        "recognized_isbn": recognized_isbn,
+        "recognized_udk": None,
+        "book_data": book_data
+    }
+
 @app.get("/api/books/{book_id}", response_model=BookDetail)
 async def get_book(book_id: int, db: AsyncSession = Depends(get_db)):
     query = select(Book).options(
@@ -113,6 +152,7 @@ async def get_book(book_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Книга не найдена")
     return book
 
+@app.post("/api/books", response_model=BookDetail, status_code=201)
 @app.post("/api/books", response_model=BookDetail, status_code=201)
 async def create_book(book_data: BookCreate, db: AsyncSession = Depends(get_db)):
     if book_data.isbn:
@@ -148,6 +188,13 @@ async def create_book(book_data: BookCreate, db: AsyncSession = Depends(get_db))
     db.add(book)
     await db.flush()
 
+    # Запись в историю — ПОСЛЕ flush, когда book.id уже доступен
+    db.add(History(
+        user_id=book_data.user_id,
+        book_id=book.id,
+        action="добавление"
+    ))
+
     for author_id in book_data.author_ids:
         author = await db.get(Author, author_id)
         if not author:
@@ -173,7 +220,6 @@ async def create_book(book_data: BookCreate, db: AsyncSession = Depends(get_db))
     created_book = result.scalar()
     return created_book
 
-
 @app.put("/api/books/{book_id}", response_model=BookDetail)
 async def update_book(book_id: int, book_data: BookUpdate, db: AsyncSession = Depends(get_db)):
     query = select(Book).options(
@@ -182,6 +228,11 @@ async def update_book(book_id: int, book_data: BookUpdate, db: AsyncSession = De
         selectinload(Book.publisher),
         selectinload(Book.location)
     ).where(Book.id == book_id)
+    db.add(History(
+        user_id=book.user_id,
+        book_id=book_id,
+        action="редактирование"
+    ))
     result = await db.execute(query)
     book = result.scalar()
     if not book:
@@ -216,6 +267,11 @@ async def update_book(book_id: int, book_data: BookUpdate, db: AsyncSession = De
 
 @app.delete("/api/books/{book_id}", status_code=204)
 async def delete_book(book_id: int, db: AsyncSession = Depends(get_db)):
+    db.add(History(
+        user_id=book.user_id,
+        book_id=book_id,
+        action="удаление"
+    ))
     book = await db.get(Book, book_id)
     if not book:
         raise HTTPException(status_code=404, detail="Книга не найдена")
@@ -380,3 +436,50 @@ async def delete_location(location_id: int, db: AsyncSession = Depends(get_db)):
     await db.delete(location)
     await db.commit()
     return None
+
+@app.get("/api/history")
+async def get_history(
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    book_id: Optional[int] = Query(None),
+    action: Optional[str] = Query(None),
+    from_date: Optional[str] = Query(None),
+    to_date: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db)
+):
+    query = select(History)
+    filters = []
+    if book_id:
+        filters.append(History.book_id == book_id)
+    if action:
+        filters.append(History.action == action)
+    if from_date:
+        filters.append(History.action_timestamp >= from_date)
+    if to_date:
+        filters.append(History.action_timestamp <= to_date)
+
+    if filters:
+        query = query.filter(*filters)
+
+    query = query.order_by(History.action_timestamp.desc())
+
+    count_query = select(func.count()).select_from(History)
+    if filters:
+        count_query = count_query.filter(*filters)
+    total = (await db.execute(count_query)).scalar()
+
+    offset = (page - 1) * size
+    query = query.offset(offset).limit(size)
+
+    result = await db.execute(query)
+    history_entries = result.scalars().all()
+
+    total_pages = math.ceil(total / size) if total else 0
+
+    return {
+        "items": history_entries,
+        "total": total,
+        "page": page,
+        "size": size,
+        "total_pages": total_pages
+    }

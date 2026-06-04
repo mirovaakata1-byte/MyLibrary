@@ -70,6 +70,7 @@ class BookGenre(Base):
     book_id = Column(Integer, ForeignKey("books.id"), primary_key=True)
     genre_id = Column(Integer, ForeignKey("genres.id"), primary_key=True)
 
+
 class History(Base):
     __tablename__ = "history"
     id = Column(Integer, primary_key=True, index=True)
@@ -77,3 +78,7 @@ class History(Base):
     book_id = Column(Integer, ForeignKey("books.id"), nullable=False)
     action = Column(String(50), nullable=False)
     action_timestamp = Column(DateTime(timezone=False), server_default=func.now())
+
+    # Связи
+    user = relationship("User")
+    book = relationship("Book")
