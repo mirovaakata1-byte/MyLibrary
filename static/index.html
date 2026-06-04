@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Моя Библиотека</title>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#4a90d9">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: Arial, sans-serif; background: #f5f5f5; padding-bottom: 80px; }
+        .header { background: #4a90d9; color: white; padding: 15px; text-align: center; font-size: 20px; position: sticky; top: 0; z-index: 10; }
+        .tabs { display: flex; background: white; border-bottom: 2px solid #ddd; position: sticky; top: 52px; z-index: 10; }
+        .tab { flex: 1; text-align: center; padding: 12px; cursor: pointer; font-weight: bold; color: #666; }
+        .tab.active { color: #4a90d9; border-bottom: 2px solid #4a90d9; margin-bottom: -2px; }
+        .content { padding: 10px; }
+        .book-card { background: white; border-radius: 8px; padding: 12px; margin-bottom: 10px; display: flex; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .book-card img { width: 60px; height: 90px; object-fit: cover; border-radius: 4px; margin-right: 12px; background: #ddd; }
+        .book-info { flex: 1; }
+        .book-title { font-weight: bold; font-size: 16px; margin-bottom: 4px; }
+        .book-author { color: #666; font-size: 14px; }
+        .book-status { font-size: 12px; padding: 2px 8px; border-radius: 10px; display: inline-block; margin-top: 4px; }
+        .status-available { background: #d4edda; color: #155724; }
+        .status-loaned { background: #fff3cd; color: #856404; }
+        .status-lost { background: #f8d7da; color: #721c24; }
+        .filters { display: flex; gap: 8px; padding: 10px; overflow-x: auto; background: white; }
+        .filter { padding: 6px 12px; border-radius: 20px; border: 1px solid #4a90d9; color: #4a90d9; font-size: 13px; cursor: pointer; white-space: nowrap; }
+        .filter.active { background: #4a90d9; color: white; }
+        .search-bar { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 20px; font-size: 14px; margin: 10px 0; }
+        .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: white; display: flex; border-top: 1px solid #ddd; padding: 8px 0; z-index: 10; }
+        .nav-btn { flex: 1; text-align: center; color: #666; cursor: pointer; font-size: 12px; }
+        .nav-btn.active { color: #4a90d9; }
+        .nav-btn span { font-size: 22px; display: block; }
+        button { background: #4a90d9; color: white; border: none; padding: 12px 24px; border-radius: 25px; font-size: 16px; cursor: pointer; width: 100%; margin-top: 10px; }
+        button.danger { background: #dc3545; }
+        .form-group { margin-bottom: 12px; }
+        .form-group label { display: block; margin-bottom: 4px; font-weight: bold; font-size: 14px; }
+        .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; }
+        .hidden { display: none; }
+        .scan-result { text-align: center; margin-top: 20px; }
+        .scan-result img { max-width: 150px; border-radius: 8px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <div class="header">📚 Моя Библиотека</div>
+
+    <!-- Навигация -->
+    <div class="bottom-nav">
+        <div class="nav-btn active" onclick="showScreen('library')"><span>📚</span>Библиотека</div>
+        <div class="nav-btn" onclick="showScreen('add')"><span>➕</span>Добавить</div>
+        <div class="nav-btn" onclick="showScreen('scan')"><span>📷</span>Скан</div>
+    </div>
+
+    <!-- Экран библиотеки -->
+    <div id="library-screen">
+        <input type="text" class="search-bar" placeholder="🔍 Поиск по названию, ISBN..." oninput="loadBooks()" id="search">
+        <div class="filters" id="status-filters">
+            <div class="filter active" onclick="setStatus('')">Все</div>
+            <div class="filter" onclick="setStatus('в наличии')">В наличии</div>
+            <div class="filter" onclick="setStatus('выдана')">Выданы</div>
+            <div class="filter" onclick="setStatus('утрачена')">Утрачены</div>
+        </div>
+        <div class="content" id="books-list">Загрузка...</div>
+    </div>
+
+    <!-- Экран добавления -->
+    <div id="add-screen" class="content hidden">
+        <h3>Добавить книгу</h3>
+        <div class="form-group"><label>Название *</label><input type="text" id="add-title"></div>
+        <div class="form-group"><label>ISBN</label><input type="text" id="add-isbn"></div>
+        <div class="form-group"><label>Год издания</label><input type="number" id="add-year"></div>
+        <div class="form-group"><label>Описание</label><textarea id="add-desc" rows="3"></textarea></div>
+        <button onclick="addBook()">✅ Сохранить</button>
+        <p id="add-message" style="margin-top:10px; text-align:center;"></p>
+    </div>
+
+    <!-- Экран сканирования -->
+    <div id="scan-screen" class="content hidden">
+        <h3>Сканировать книгу по фото</h3>
+        <input type="file" accept="image/*" capture="environment" id="scan-input" onchange="scanBook()" style="display:none;">
+        <button onclick="document.getElementById('scan-input').click()">📸 Сделать фото / Выбрать из галереи</button>
+        <div id="scan-result" class="scan-result"></div>
+        <button id="save-scan-btn" class="hidden" onclick="saveScannedBook()">💾 Сохранить книгу</button>
+    </div>
+
+    <script>
+        const API = 'http://127.0.0.1:8000/api';
+        let currentStatus = '';
+        let scannedData = null;
+
+        function showScreen(screen) {
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('#library-screen, #add-screen, #scan-screen').forEach(s => s.classList.add('hidden'));
+            document.getElementById(screen + '-screen').classList.remove('hidden');
+            event.target.closest('.nav-btn').classList.add('active');
+            if (screen === 'library') loadBooks();
+        }
+
+        function setStatus(status) {
+            currentStatus = status;
+            document.querySelectorAll('#status-filters .filter').forEach(f => f.classList.remove('active'));
+            event.target.classList.add('active');
+            loadBooks();
+        }
+
+        async function loadBooks() {
+            const search = document.getElementById('search').value;
+            let url = `${API}/books?size=50`;
+            if (currentStatus) url += `&status=${encodeURIComponent(currentStatus)}`;
+            if (search) url += `&search=${encodeURIComponent(search)}`;
+
+            try {
+                const res = await fetch(url);
+                const data = await res.json();
+                const container = document.getElementById('books-list');
+                if (!data.items || data.items.length === 0) {
+                    container.innerHTML = '<p style="text-align:center; color:#999; padding:40px;">Книг не найдено</p>';
+                    return;
+                }
+                container.innerHTML = data.items.map(book => `
+                    <div class="book-card" onclick="deleteBook(${book.id})">
+                        <img src="${book.cover_image_path || 'https://via.placeholder.com/60x90?text=No+Cover'}" alt="Обложка" onerror="this.src='https://via.placeholder.com/60x90?text=No+Cover'">
+                        <div class="book-info">
+                            <div class="book-title">${book.title}</div>
+                            <div class="book-author">${(book.authors || []).map(a => a.name).join(', ') || 'Автор неизвестен'}</div>
+                            <span class="book-status status-${book.status === 'в наличии' ? 'available' : book.status === 'выдана' ? 'loaned' : 'lost'}">${book.status}</span>
+                            <div style="font-size:11px; color:#999; margin-top:4px;">📍 ${book.location?.name || '—'}</div>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (e) {
+                document.getElementById('books-list').innerHTML = '<p style="color:red;">Ошибка загрузки</p>';
+            }
+        }
+
+        async function deleteBook(id) {
+            if (!confirm('Удалить книгу?')) return;
+            await fetch(`${API}/books/${id}`, { method: 'DELETE' });
+            loadBooks();
+        }
+
+        async function addBook() {
+            const title = document.getElementById('add-title').value;
+            if (!title) return alert('Введите название');
+            const body = {
+                title,
+                isbn: document.getElementById('add-isbn').value || null,
+                publication_year: parseInt(document.getElementById('add-year').value) || null,
+                description: document.getElementById('add-desc').value || null,
+                status: 'в наличии',
+                user_id: 1
+            };
+            try {
+                const res = await fetch(`${API}/books`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                if (res.ok) {
+                    document.getElementById('add-message').innerHTML = '✅ Книга добавлена!';
+                    document.getElementById('add-title').value = '';
+                    document.getElementById('add-isbn').value = '';
+                    document.getElementById('add-year').value = '';
+                    document.getElementById('add-desc').value = '';
+                } else {
+                    document.getElementById('add-message').innerHTML = '❌ Ошибка';
+                }
+            } catch (e) {
+                document.getElementById('add-message').innerHTML = '❌ Ошибка соединения';
+            }
+        }
+
+        async function scanBook() {
+            const file = document.getElementById('scan-input').files[0];
+            if (!file) return;
+            const formData = new FormData();
+            formData.append('image', file);
+            const resultDiv = document.getElementById('scan-result');
+            resultDiv.innerHTML = '<p>⏳ Распознавание...</p>';
+
+            try {
+                const res = await fetch(`${API}/books/scan`, { method: 'POST', body: formData });
+                const data = await res.json();
+                scannedData = data;
+                resultDiv.innerHTML = `
+                    ${data.book_data ? `
+                        <img src="${data.book_data.cover_url || ''}" alt="Обложка" onerror="this.style.display='none'">
+                        <h4>${data.book_data.title || 'Неизвестная книга'}</h4>
+                        <p>Автор: ${(data.book_data.authors || []).join(', ') || '—'}</p>
+                        <p>ISBN: ${data.recognized_isbn || '—'}</p>
+                        <p>Год: ${data.book_data.year || '—'}</p>
+                    ` : `<p>ISBN не распознан</p>`}
+                `;
+                if (data.recognized_isbn && data.book_data) {
+                    document.getElementById('save-scan-btn').classList.remove('hidden');
+                }
+            } catch (e) {
+                resultDiv.innerHTML = '<p style="color:red;">Ошибка распознавания</p>';
+            }
+        }
+
+        async function saveScannedBook() {
+            if (!scannedData || !scannedData.book_data) return;
+            const book = scannedData.book_data;
+            const body = {
+                title: book.title || 'Неизвестная книга',
+                isbn: scannedData.recognized_isbn,
+                publication_year: book.year,
+                description: book.description,
+                cover_image_path: book.cover_url,
+                status: 'в наличии',
+                user_id: 1
+            };
+            try {
+                const res = await fetch(`${API}/books`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                if (res.ok) {
+                    alert('Книга сохранена!');
+                    showScreen('library');
+                }
+            } catch (e) {
+                alert('Ошибка сохранения');
+            }
+        }
+
+        // Первая загрузка
+        loadBooks();
+    </script>
+</body>
+</html>
