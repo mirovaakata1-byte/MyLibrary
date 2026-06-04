@@ -6,6 +6,7 @@ from external_api import search_by_isbn
 from typing import Optional
 from ocr import extract_text_from_image, find_isbn
 from fastapi import UploadFile, File
+from fastapi.staticfiles import StaticFiles
 import math
 
 from database import get_db
@@ -483,3 +484,6 @@ async def get_history(
         "size": size,
         "total_pages": total_pages
     }
+
+
+app.mount("/static", StaticFiles(directory="static", html=True), name="static")
